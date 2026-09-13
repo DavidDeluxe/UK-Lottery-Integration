@@ -1,7 +1,8 @@
-import csv
-import io
 import logging
-from datetime import datetime, timedelta
+import ssl
+import urllib.request
+import xml.etree.ElementTree as ET
+from datetime import timedelta
 import aiohttp
 
 from homeassistant.core import HomeAssistant
@@ -9,17 +10,22 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 _LOGGER = logging.getLogger(__name__)
 
-UK_CSV_ENDPOINTS = {
-    "lotto": "https://www.national-lottery.co.uk/results/lotto/draw-history/csv",
-    "euromillions": "https://www.national-lottery.co.uk/results/euromillions/draw-history/csv",
-    "set_for_life": "https://www.national-lottery.co.uk/results/set-for-life/draw-history/csv",
-    "thunderball": "https://www.national-lottery.co.uk/results/thunderball/draw-history/csv",
+UK_XML_ENDPOINTS = {
+    "lotto": "https://www.national-lottery.co.uk/results/lotto/draw-history/xml",
+    "euromillions": "https://www.national-lottery.co.uk/results/euromillions/draw-history/xml",
+    "set_for_life": "https://www.national-lottery.co.uk/results/set-for-life/draw-history/xml",
+    "thunderball": "https://www.national-lottery.co.uk/results/thunderball/draw-history/xml",
 }
 
 POWERBALL_ENDPOINT = "https://data.ny.gov/resource/d6yy-54nr.json?$limit=2&$order=draw_date%20DESC"
 
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "text/xml,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+}
+
 class UKLotteryCoordinator(DataUpdateCoordinator):
-    """Coordinator fetching all 7 lottery games."""
+    """Coordinator fetching official lottery draw XML feeds."""
 
     def __init__(self, hass: HomeAssistant, session: aiohttp.ClientSession):
         super().__init__(
@@ -30,39 +36,105 @@ class UKLotteryCoordinator(DataUpdateCoordinator):
         )
         self.session = session
 
+    def _fetch_and_parse_uk_xml(self, url: str, game: str) -> dict:
+        """Fetch and extract draw information from the official XML schema."""
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+
+        req = urllib.request.Request(url, headers=HEADERS)
+        with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:
+            content = resp.read()
+            root = ET.fromstring(content)
+
+            # Find <game> tag
+            game_elem = root.find(f".//game[@type='{game}']") or root.find(".//game")
+            if game_elem is None:
+                _LOGGER.warning("No <game> tag found in XML for %s", game)
+                return {}
+
+            # 1. Date
+            draw_date = ""
+            date_elem = game_elem.find(".//draw/draw-date")
+            if date_elem is not None and date_elem.text:
+                draw_date = date_elem.text.strip()
+
+            # 2. Main balls & Specials
+            # The XML contains <balls><set>L1</set><ball ...>...</ball><bonus-ball>...</bonus-ball></balls>
+            # We take the primary set (the first <balls> block)
+            balls = []
+            specials = []
+            balls_elem = game_elem.find("balls")
+            if balls_elem is not None:
+                for b in balls_elem.findall("ball"):
+                    if b.text and b.text.strip().isdigit():
+                        balls.append(int(b.text.strip()))
+
+                for bonus in balls_elem.findall("bonus-ball"):
+                    if bonus.text and bonus.text.strip().isdigit():
+                        specials.append(int(bonus.text.strip()))
+
+            parsed = {
+                "date": draw_date,
+                "balls": sorted(balls),
+            }
+
+            if game == "lotto":
+                parsed["bonus_ball"] = specials[0] if specials else None
+            elif game == "euromillions":
+                parsed["lucky_stars"] = specials
+            elif game == "set_for_life":
+                parsed["life_ball"] = specials[0] if specials else None
+            elif game == "thunderball":
+                parsed["thunderball"] = specials[0] if specials else None
+
+            # Next draw date from official feed if present
+            next_date_elem = game_elem.find("next-draw-date")
+            if next_date_elem is not None and next_date_elem.text:
+                parsed["next_draw_feed"] = next_date_elem.text.strip()
+
+            return parsed
+
     async def _async_update_data(self):
         data = {}
-        headers = {"User-Agent": "Mozilla/5.0"}
 
-        # 1. Fetch UK National Lottery CSVs
-        for game, url in UK_CSV_ENDPOINTS.items():
+        # 1. Fetch UK Games
+        for game, url in UK_XML_ENDPOINTS.items():
             try:
-                async with self.session.get(url, headers=headers, timeout=10) as resp:
-                    if resp.status == 200:
-                        text = await resp.text()
-                        reader = list(csv.reader(io.StringIO(text)))
-                        if len(reader) >= 3:
-                            data[game] = {
-                                "latest": self._parse_uk_row(game, reader[1]),
-                                "previous": self._parse_uk_row(game, reader[2]),
-                            }
+                latest_draw = await self.hass.async_add_executor_job(
+                    self._fetch_and_parse_uk_xml, url, game
+                )
+                if latest_draw and latest_draw.get("balls"):
+                    data[game] = {
+                        "latest": latest_draw,
+                        "previous": {},  # Feed supplies the current latest verified draw
+                    }
+                    _LOGGER.info("Successfully parsed %s: %s", game, latest_draw)
+                else:
+                    _LOGGER.warning("Parsed empty draw for %s", game)
             except Exception as err:
-                _LOGGER.warning("Error fetching %s CSV: %s", game, err)
+                _LOGGER.error("Error parsing %s XML: %s", game, err)
 
-        # 2. Derive HotPicks from parent draws
-        if "lotto" in data:
+        # 2. Derive HotPicks
+        if "lotto" in data and "latest" in data["lotto"]:
             data["lotto_hotpicks"] = {
-                "latest": {"date": data["lotto"]["latest"]["date"], "balls": data["lotto"]["latest"]["balls"]},
-                "previous": {"date": data["lotto"]["previous"]["date"], "balls": data["lotto"]["previous"]["balls"]},
+                "latest": {
+                    "date": data["lotto"]["latest"].get("date"),
+                    "balls": data["lotto"]["latest"].get("balls", []),
+                },
+                "previous": {},
             }
 
-        if "euromillions" in data:
+        if "euromillions" in data and "latest" in data["euromillions"]:
             data["euromillions_hotpicks"] = {
-                "latest": {"date": data["euromillions"]["latest"]["date"], "balls": data["euromillions"]["latest"]["balls"]},
-                "previous": {"date": data["euromillions"]["previous"]["date"], "balls": data["euromillions"]["previous"]["balls"]},
+                "latest": {
+                    "date": data["euromillions"]["latest"].get("date"),
+                    "balls": data["euromillions"]["latest"].get("balls", []),
+                },
+                "previous": {},
             }
 
-        # 3. Fetch Powerball (US Open Data JSON)
+        # 3. US Powerball
         try:
             async with self.session.get(POWERBALL_ENDPOINT, timeout=10) as resp:
                 if resp.status == 200:
@@ -73,46 +145,17 @@ class UKLotteryCoordinator(DataUpdateCoordinator):
                             "previous": self._parse_powerball_row(pb_json[1]),
                         }
         except Exception as err:
-            _LOGGER.warning("Error fetching Powerball: %s", err)
+            _LOGGER.error("Failed fetching Powerball: %s", err)
 
         if not data:
-            raise UpdateFailed("Failed to fetch lottery data.")
+            raise UpdateFailed("No lottery feeds could be retrieved.")
+
         return data
 
-    def _parse_uk_row(self, game: str, row: list) -> dict:
-        date = row[0]
-        if game == "lotto":
-            return {
-                "date": date,
-                "balls": [int(x) for x in row[1:7] if x.strip()],
-                "bonus_ball": int(row[7]) if row[7].strip() else None,
-            }
-        elif game == "euromillions":
-            return {
-                "date": date,
-                "balls": [int(x) for x in row[1:6] if x.strip()],
-                "lucky_stars": [int(x) for x in row[6:8] if x.strip()],
-            }
-        elif game == "set_for_life":
-            return {
-                "date": date,
-                "balls": [int(x) for x in row[1:6] if x.strip()],
-                "life_ball": int(row[6]) if row[6].strip() else None,
-            }
-        elif game == "thunderball":
-            return {
-                "date": date,
-                "balls": [int(x) for x in row[1:6] if x.strip()],
-                "thunderball": int(row[6]) if row[6].strip() else None,
-            }
-        return {"date": date}
-
     def _parse_powerball_row(self, row: dict) -> dict:
-        # winning_numbers: "05 14 19 46 64 22" (first 5 white balls, last is Powerball)
         nums = [int(x) for x in row.get("winning_numbers", "").split() if x]
         return {
             "date": row.get("draw_date", "").split("T")[0],
             "balls": nums[:5] if len(nums) >= 5 else [],
             "powerball": nums[5] if len(nums) >= 6 else None,
-            "multiplier": row.get("multiplier"),
         }
