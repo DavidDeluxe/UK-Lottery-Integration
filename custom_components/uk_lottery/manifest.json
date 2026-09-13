@@ -1,11 +1,11 @@
 {
-  "domain": "uk_lottery",
-  "name": "UK National Lottery",
-  "codeowners": ["@your_github_username"],
+  "domain": "uk_lottery_integration",
+  "name": "UK Lottery Integration",
+  "codeowners": ["DavidDeluxe"],
   "config_flow": true,
-  "documentation": "https://github.com/your_username/uk_lottery",
+  "documentation": "https://github.com/DavidDeluxe/UK-Lottery-Integration",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/your_username/uk_lottery/issues",
+  "issue_tracker": "https://github.com/DavidDeluxe/UK-Lottery-Integration/issues",
   "version": "1.0.0"
 }
