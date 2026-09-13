@@ -5,13 +5,14 @@ import zoneinfo
 UK_TZ = zoneinfo.ZoneInfo("Europe/London")
 
 DRAW_SCHEDULE = {
-    "lotto": {"days": [2, 5], "time": time(20, 0)},             # Wed, Sat 20:00
-    "euromillions": {"days": [1, 4], "time": time(20, 45)},      # Tue, Fri 20:45
-    "set_for_life": {"days": [0, 3], "time": time(20, 0)},       # Mon, Thu 20:00
-    "thunderball": {"days": [1, 2, 4, 5], "time": time(20, 0)},  # Tue, Wed, Fri, Sat 20:00
-    "lotto_hotpicks": {"days": [2, 5], "time": time(20, 0)},
-    "euromillions_hotpicks": {"days": [1, 4], "time": time(20, 45)},
-    "powerball": {"days": [1, 3, 6], "time": time(4, 30)},       # Tue, Thu, Sun 04:30 (UK time)
+    
+    "euromillions": {"days": [1, 4], "time": time(20, 45)},             # Tue, Fri 20:45
+    "euromillions_hotpicks": {"days": [1, 4], "time": time(20, 45)},    # Tue, Fri 20:45
+    "lotto": {"days": [2, 5], "time": time(20, 0)},                     # Wed, Sat 20:00
+    "lotto_hotpicks": {"days": [2, 5], "time": time(20, 0)},            # Wed, Sat 20:00
+    "set_for_life": {"days": [0, 3], "time": time(20, 0)},              # Mon, Thu 20:00
+    "powerball": {"days": [1, 3, 6], "time": time(4, 30)},              # Tue, Thu, Sun 04:30 (UK time)
+    "thunderball": {"days": [1, 2, 4, 5], "time": time(20, 0)},         # Tue, Wed, Fri, Sat 20:00
 }
 
 def calculate_next_draw(game: str) -> str | None:

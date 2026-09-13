@@ -13,13 +13,13 @@ from homeassistant.helpers.selector import (
 from .const import DOMAIN, GAMES, GAME_RULES
 
 GAME_LABELS = {
-    "lotto": "Lotto",
     "euromillions": "EuroMillions",
-    "set_for_life": "Set For Life",
-    "thunderball": "Thunderball",
-    "lotto_hotpicks": "Lotto HotPicks",
     "euromillions_hotpicks": "EuroMillions HotPicks",
+    "lotto": "Lotto",
+    "lotto_hotpicks": "Lotto HotPicks",
     "powerball": "Powerball",
+    "set_for_life": "Set For Life",
+    "thunderball": "Thunderball", 
 }
 
 def build_line_schema(game: str, existing_values: dict = None) -> vol.Schema:
