@@ -1,0 +1,34 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Select Lottery Game",
+        "description": "Choose which lottery game device to add."
+      },
+      "line": {
+        "title": "Enter Your Lucky Numbers",
+        "description": "Pick your numbers for this game. Numbers are verified for duplicates and range automatically."
+      }
+    },
+    "error": {
+      "duplicate_main_balls": "You cannot select the same main ball more than once.",
+      "duplicate_special_balls": "You cannot select duplicate bonus / lucky star balls."
+    },
+    "abort": {
+      "all_games_configured": "All supported lottery games have already been added.",
+      "already_configured": "This lottery game is already configured as a device."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Configure Numbers",
+        "description": "Update your selected ticket line for this game."
+      }
+    },
+    "error": {
+      "duplicate_main_balls": "You cannot select the same main ball more than once.",
+      "duplicate_special_balls": "You cannot select duplicate bonus / lucky star balls."
+    }
+  }
+}
