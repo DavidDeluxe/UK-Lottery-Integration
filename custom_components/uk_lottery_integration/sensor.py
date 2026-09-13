@@ -6,6 +6,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .checker import parse_user_lines, evaluate_line
+from .const import DOMAIN, GAMES
 
 class LotteryGameSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator, game: str, entry: ConfigEntry):
@@ -37,16 +38,6 @@ class LotteryGameSensor(CoordinatorEntity, SensorEntity):
             "checked_lines_latest": evaluated_latest,
             "checked_lines_previous": evaluated_previous,
         }
-
-GAMES = [
-    "lotto",
-    "euromillions",
-    "powerball",
-    "set_for_life",
-    "thunderball",
-    "lotto_hotpicks",
-    "euromillions_hotpicks",
-]
 
 # Draw schedules: (Day of week: 0=Mon, 1=Tue... 6=Sun, Hour, Minute, Timezone)
 SCHEDULES = {
