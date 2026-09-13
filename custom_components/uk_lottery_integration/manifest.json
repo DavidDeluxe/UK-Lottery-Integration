@@ -1,7 +1,7 @@
 {
   "domain": "uk_lottery_integration",
   "name": "UK Lottery Integration",
-  "codeowners": ["DavidDeluxe"],
+  "codeowners": ["@DavidDeluxe"],
   "config_flow": true,
   "documentation": "https://github.com/DavidDeluxe/UK-Lottery-Integration",
   "integration_type": "hub",
