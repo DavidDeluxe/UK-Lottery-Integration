@@ -4,8 +4,9 @@
   "codeowners": ["@DavidDeluxe"],
   "config_flow": true,
   "documentation": "https://github.com/DavidDeluxe/UK-Lottery-Integration",
-  "integration_type": "hub",
+  "integration_type": "device",
   "iot_class": "cloud_polling",
+  "single_config_entry": false,
   "issue_tracker": "https://github.com/DavidDeluxe/UK-Lottery-Integration/issues",
   "version": "1.0.0"
 }

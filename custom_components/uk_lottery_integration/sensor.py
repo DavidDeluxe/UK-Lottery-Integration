@@ -19,20 +19,22 @@ async def async_setup_entry(
 
 
 class LotteryGameSensor(CoordinatorEntity, SensorEntity):
+    _attr_has_entity_name = True
+    _attr_name = None  # Uses device name directly as the primary entity name
+    
     def __init__(self, coordinator, game: str, entry: ConfigEntry):
         super().__init__(coordinator)
         self._game = game
         self._entry = entry
         self._attr_unique_id = f"{DOMAIN}_{game}"
-        self._attr_name = game.replace("_", " ").title()
         self._attr_icon = "mdi:ticket-percent-outline"
 
         # Explicit Home Assistant Device Registration
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, game)},
-            name=f"{self._attr_name} Tracker",
-            manufacturer="National Lottery" if game != "powerball" else "Multi-State Lottery",
-            model=self._attr_name,
+            name=game.replace("_", " ").title(),
+            manufacturer="National Lottery",
+            model="Draw Tracker",
         )
 
     @property

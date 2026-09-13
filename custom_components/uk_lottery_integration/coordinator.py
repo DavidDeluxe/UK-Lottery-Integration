@@ -15,6 +15,7 @@ UK_XML_ENDPOINTS = {
     "euromillions": "https://www.national-lottery.co.uk/results/euromillions/draw-history/xml",
     "set_for_life": "https://www.national-lottery.co.uk/results/set-for-life/draw-history/xml",
     "thunderball": "https://www.national-lottery.co.uk/results/thunderball/draw-history/xml",
+    "powerball": "https://www.national-lottery.co.uk/results/powerball/draw-history/xml",
 }
 
 POWERBALL_ENDPOINT = "https://data.ny.gov/resource/d6yy-54nr.json?$limit=2&$order=draw_date%20DESC"
@@ -47,7 +48,6 @@ class UKLotteryCoordinator(DataUpdateCoordinator):
             content = resp.read()
             root = ET.fromstring(content)
 
-            # Find <game> tag
             game_elem = root.find(f".//game[@type='{game}']") or root.find(".//game")
             if game_elem is None:
                 _LOGGER.warning("No <game> tag found in XML for %s", game)
@@ -60,8 +60,6 @@ class UKLotteryCoordinator(DataUpdateCoordinator):
                 draw_date = date_elem.text.strip()
 
             # 2. Main balls & Specials
-            # The XML contains <balls><set>L1</set><ball ...>...</ball><bonus-ball>...</bonus-ball></balls>
-            # We take the primary set (the first <balls> block)
             balls = []
             specials = []
             balls_elem = game_elem.find("balls")
@@ -70,6 +68,7 @@ class UKLotteryCoordinator(DataUpdateCoordinator):
                     if b.text and b.text.strip().isdigit():
                         balls.append(int(b.text.strip()))
 
+                # Captures bonus-ball, powerball, or life-ball tags
                 for bonus in balls_elem.findall("bonus-ball"):
                     if bonus.text and bonus.text.strip().isdigit():
                         specials.append(int(bonus.text.strip()))
@@ -87,8 +86,9 @@ class UKLotteryCoordinator(DataUpdateCoordinator):
                 parsed["life_ball"] = specials[0] if specials else None
             elif game == "thunderball":
                 parsed["thunderball"] = specials[0] if specials else None
+            elif game == "powerball":
+                parsed["powerball"] = specials[0] if specials else None
 
-            # Next draw date from official feed if present
             next_date_elem = game_elem.find("next-draw-date")
             if next_date_elem is not None and next_date_elem.text:
                 parsed["next_draw_feed"] = next_date_elem.text.strip()
@@ -98,7 +98,7 @@ class UKLotteryCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self):
         data = {}
 
-        # 1. Fetch UK Games
+        # Fetch all XML feeds
         for game, url in UK_XML_ENDPOINTS.items():
             try:
                 latest_draw = await self.hass.async_add_executor_job(
@@ -107,7 +107,7 @@ class UKLotteryCoordinator(DataUpdateCoordinator):
                 if latest_draw and latest_draw.get("balls"):
                     data[game] = {
                         "latest": latest_draw,
-                        "previous": {},  # Feed supplies the current latest verified draw
+                        "previous": {},
                     }
                     _LOGGER.info("Successfully parsed %s: %s", game, latest_draw)
                 else:
@@ -115,7 +115,7 @@ class UKLotteryCoordinator(DataUpdateCoordinator):
             except Exception as err:
                 _LOGGER.error("Error parsing %s XML: %s", game, err)
 
-        # 2. Derive HotPicks
+        # HotPicks derived games
         if "lotto" in data and "latest" in data["lotto"]:
             data["lotto_hotpicks"] = {
                 "latest": {
@@ -134,28 +134,7 @@ class UKLotteryCoordinator(DataUpdateCoordinator):
                 "previous": {},
             }
 
-        # 3. US Powerball
-        try:
-            async with self.session.get(POWERBALL_ENDPOINT, timeout=10) as resp:
-                if resp.status == 200:
-                    pb_json = await resp.json()
-                    if len(pb_json) >= 2:
-                        data["powerball"] = {
-                            "latest": self._parse_powerball_row(pb_json[0]),
-                            "previous": self._parse_powerball_row(pb_json[1]),
-                        }
-        except Exception as err:
-            _LOGGER.error("Failed fetching Powerball: %s", err)
-
         if not data:
             raise UpdateFailed("No lottery feeds could be retrieved.")
 
         return data
-
-    def _parse_powerball_row(self, row: dict) -> dict:
-        nums = [int(x) for x in row.get("winning_numbers", "").split() if x]
-        return {
-            "date": row.get("draw_date", "").split("T")[0],
-            "balls": nums[:5] if len(nums) >= 5 else [],
-            "powerball": nums[5] if len(nums) >= 6 else None,
-        }
